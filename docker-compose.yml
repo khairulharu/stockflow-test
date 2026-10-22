@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16
-    container_name: my-postgres
+    container_name: local-postgres
     environment:
       POSTGRES_USER: khai
       POSTGRES_PASSWORD: secret
@@ -10,7 +10,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./seed:/docker-entrypoint-initdb.d
 
 volumes:
   pgdata:
