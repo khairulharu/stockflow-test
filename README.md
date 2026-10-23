@@ -25,3 +25,5 @@ migrate -database "postgres://khai:secret@localhost:5432/mydb?sslmode=disable" -
 ```
 docker exec -i local-postgres psql -U khai -d mydb < ./backend//db/seed/001_seed_products.sql
 ```
+
+-- rest 8:33PM 
