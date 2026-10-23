@@ -1,0 +1,16 @@
+{
+  "app": {
+    "name": "stockflow"
+  },
+  "web": {
+    "prefork": false,
+    "port": 3000
+  },
+  "database": {
+    "username": "khai",
+    "password": "secret",
+    "host": "127.0.0.1",
+    "port": 5432,
+    "name": "mydb"
+  }
+}
