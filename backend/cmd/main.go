@@ -6,9 +6,14 @@ import (
 )
 
 func main() {
-	config := config.NewViper()
-	if config.GetString("app.name") != "stockflow" {
+	viperConfig := config.NewViper()
+	if viperConfig.GetString("app.name") != "stockflow" {
 		panic("error loading config")
 	}
-	fmt.Println(config.GetString("app.name"))
+	fmt.Println(viperConfig.GetString("app.name"))
+
+	db := config.NewDatabase(viperConfig)
+	if db != nil {
+		fmt.Printf("connecting to database: %s \n", viperConfig.GetString("database.name"))
+	}
 }
