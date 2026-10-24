@@ -64,3 +64,21 @@ func (p *ProductRepository) Search(ctx context.Context, request *model.SearchPro
 
 	return products, total, nil
 }
+
+func (p *ProductRepository) Create(ctx context.Context, request *model.CreateProductRequest) error {
+	createQuery := `INSERT INTO products (sku, name, price, stock) VALUES ($1, $2, $3, $4)`
+	_, err := p.DB.ExecContext(ctx, createQuery, request.SKU, request.Name, request.Price, request.Stock)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *ProductRepository) GetSKU(ctx context.Context, SKU string) (bool, error) {
+	getSKUQuery := `SELECT EXIST (SELECT 1 FROM products WHERE sku = $1)`
+	var exist bool
+	if err := p.DB.QueryRowContext(ctx, getSKUQuery, SKU).Scan(&exist); err != nil {
+		return false, err
+	}
+	return exist, nil
+}

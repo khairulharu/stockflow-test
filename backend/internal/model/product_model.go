@@ -22,6 +22,13 @@ type SearchProductRequest struct {
 	Limit  int    `json:"limit"`
 }
 
+type CreateProductRequest struct {
+	SKU   string `json:"sku"`
+	Name  string `json:"name"`
+	Price int64  `json:"price"`
+	Stock int64  `json:"stock"`
+}
+
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func (s *SearchProductRequest) EscapedSearch() string {
