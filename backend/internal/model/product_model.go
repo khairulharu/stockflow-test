@@ -23,10 +23,11 @@ type SearchProductRequest struct {
 }
 
 type CreateProductRequest struct {
-	SKU   string `json:"sku"`
-	Name  string `json:"name"`
-	Price int64  `json:"price"`
-	Stock int64  `json:"stock"`
+	SKU   string `json:"sku" validate:"required,max=50"`
+	Name  string `json:"name" validate:"required,max=255"`
+	Price int64  `json:"price" validate:"gte=0"`
+	Stock int    `json:"stock" validate:"gte=0"`
+	Note  string `json:"note" validate:"max=255"`
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)

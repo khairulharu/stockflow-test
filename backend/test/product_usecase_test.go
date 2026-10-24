@@ -10,6 +10,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gofiber/fiber/v2"
 
+	"stockflow/internal/config"
 	"stockflow/internal/model"
 	"stockflow/internal/repository"
 	"stockflow/internal/usecase"
@@ -27,7 +28,7 @@ func newUseCase(t *testing.T) (*usecase.ProductUseCase, sqlmock.Sqlmock) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	repo := repository.NewProductRepository(db)
-	return usecase.NewProductUseCase(repo), mock
+	return usecase.NewProductUseCase(repo, config.NewValidator()), mock
 }
 
 func TestProductUseCase_SearchProduct_Success(t *testing.T) {
@@ -232,5 +233,142 @@ func TestProductResponse_LastMovementAt_JSON(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"last_movement_at":null`) {
 		t.Errorf("json = %s, want key last_movement_at with null", b)
+	}
+}
+
+func TestProductUseCase_CreateProduct_NormalizesAndSaves(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	// input kotor -> yang sampai ke DB harus sudah di-trim dan SKU uppercase
+	mock.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnRows(existsRows(false))
+	mock.ExpectBegin()
+	mock.ExpectQuery(createProductQuery).
+		WithArgs("ABC-001", "Kopi Susu", int64(15000), 10).
+		WillReturnRows(idRows(1))
+	mock.ExpectExec(insertMovementQuery).
+		WithArgs(int64(1), "in", 10, "stok awal").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err := uc.CreateProduct(context.Background(), &model.CreateProductRequest{
+		SKU: "  abc-001 ", Name: "  Kopi Susu ", Price: 15000, Stock: 10, Note: " stok awal ",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductUseCase_CreateProduct_ZeroPriceAndStockAreValid(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	mock.ExpectQuery(existsSKUQuery).WithArgs("FREE-001").WillReturnRows(existsRows(false))
+	mock.ExpectBegin()
+	mock.ExpectQuery(createProductQuery).
+		WithArgs("FREE-001", "Gratis", int64(0), 0).
+		WillReturnRows(idRows(1))
+	mock.ExpectCommit()
+
+	err := uc.CreateProduct(context.Background(), &model.CreateProductRequest{
+		SKU: "FREE-001", Name: "Gratis", Price: 0, Stock: 0,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductUseCase_CreateProduct_ValidationFails(t *testing.T) {
+	tests := []struct {
+		name    string
+		request model.CreateProductRequest
+	}{
+		{"empty sku", model.CreateProductRequest{SKU: "", Name: "Kopi", Price: 1, Stock: 1}},
+		{"whitespace sku", model.CreateProductRequest{SKU: "   ", Name: "Kopi", Price: 1, Stock: 1}},
+		{"empty name", model.CreateProductRequest{SKU: "A1", Name: "", Price: 1, Stock: 1}},
+		{"whitespace name", model.CreateProductRequest{SKU: "A1", Name: "  ", Price: 1, Stock: 1}},
+		{"negative price", model.CreateProductRequest{SKU: "A1", Name: "Kopi", Price: -1, Stock: 1}},
+		{"negative stock", model.CreateProductRequest{SKU: "A1", Name: "Kopi", Price: 1, Stock: -1}},
+		{"sku too long", model.CreateProductRequest{SKU: strings.Repeat("A", 51), Name: "Kopi", Price: 1, Stock: 1}},
+		{"name too long", model.CreateProductRequest{SKU: "A1", Name: strings.Repeat("a", 256), Price: 1, Stock: 1}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			uc, mock := newUseCase(t)
+
+			// tidak ada expectation: validasi harus menolak sebelum menyentuh DB
+			request := tc.request
+			err := uc.CreateProduct(context.Background(), &request)
+			if statusCode(err) != fiber.StatusBadRequest {
+				t.Fatalf("status = %d (err=%v), want 400", statusCode(err), err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductUseCase_CreateProduct_DuplicateSKU(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	// "abc-001" dinormalisasi jadi "ABC-001" sebelum dicek, dan tidak boleh ada Begin
+	mock.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnRows(existsRows(true))
+
+	err := uc.CreateProduct(context.Background(), &model.CreateProductRequest{
+		SKU: "abc-001", Name: "Kopi", Price: 15000, Stock: 10,
+	})
+	if statusCode(err) != fiber.StatusConflict {
+		t.Fatalf("status = %d (err=%v), want 409", statusCode(err), err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductUseCase_CreateProduct_InternalErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(m sqlmock.Sqlmock)
+	}{
+		{
+			name: "exists check fails",
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnError(errBoom)
+			},
+		},
+		{
+			name: "create fails",
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnRows(existsRows(false))
+				m.ExpectBegin()
+				m.ExpectQuery(createProductQuery).
+					WithArgs("ABC-001", "Kopi", int64(15000), 10).
+					WillReturnError(errBoom)
+				m.ExpectRollback()
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			uc, mock := newUseCase(t)
+			tc.setup(mock)
+
+			err := uc.CreateProduct(context.Background(), &model.CreateProductRequest{
+				SKU: "ABC-001", Name: "Kopi", Price: 15000, Stock: 10,
+			})
+			if statusCode(err) != fiber.StatusInternalServerError {
+				t.Fatalf("status = %d (err=%v), want 500", statusCode(err), err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
 	}
 }

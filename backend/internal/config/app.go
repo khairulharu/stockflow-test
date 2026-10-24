@@ -7,18 +7,20 @@ import (
 	"stockflow/internal/repository"
 	"stockflow/internal/usecase"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 
 type BootstrapConfig struct {
-	DB  *sql.DB
-	App *fiber.App
+	DB       *sql.DB
+	App      *fiber.App
+	Validate *validator.Validate
 }
 
 func Bootstrap(config *BootstrapConfig) {
 	productRepository := repository.NewProductRepository(config.DB)
 
-	productUseCase := usecase.NewProductUseCase(productRepository)
+	productUseCase := usecase.NewProductUseCase(productRepository, config.Validate)
 
 	productController := http.NewProductController(productUseCase)
 

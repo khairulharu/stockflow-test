@@ -50,3 +50,17 @@ func (p *ProductController) SearchProducts(ctx *fiber.Ctx) error {
 	})
 
 }
+
+func (p *ProductController) Create(ctx *fiber.Ctx) error {
+	var request model.CreateProductRequest
+
+	if err := ctx.BodyParser(&request); err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	if err := p.ProductUseCase.CreateProduct(ctx.UserContext(), &request); err != nil {
+		return err
+	}
+
+	return ctx.SendStatus(fiber.StatusCreated)
+}

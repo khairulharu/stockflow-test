@@ -242,3 +242,138 @@ func TestProductRepository_Search_RowsIterationError(t *testing.T) {
 		t.Errorf("got products=%v total=%d, want nil and 0", products, total)
 	}
 }
+
+func TestProductRepository_Create_WithStock(t *testing.T) {
+	repo, mock := newMockRepo(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(createProductQuery).
+		WithArgs("ABC-001", "Kopi", int64(15000), 10).
+		WillReturnRows(idRows(1))
+	mock.ExpectExec(insertMovementQuery).
+		WithArgs(int64(1), "in", 10, "initial stock").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err := repo.Create(context.Background(), &model.CreateProductRequest{
+		SKU: "ABC-001", Name: "Kopi", Price: 15000, Stock: 10, Note: "initial stock",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductRepository_Create_ZeroStock_SkipsMovement(t *testing.T) {
+	repo, mock := newMockRepo(t)
+
+	// tidak ada ExpectExec: kalau repo tetap insert movement (qty 0 melanggar CHECK), test gagal
+	mock.ExpectBegin()
+	mock.ExpectQuery(createProductQuery).
+		WithArgs("ABC-001", "Kopi", int64(15000), 0).
+		WillReturnRows(idRows(1))
+	mock.ExpectCommit()
+
+	err := repo.Create(context.Background(), &model.CreateProductRequest{
+		SKU: "ABC-001", Name: "Kopi", Price: 15000, Stock: 0,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductRepository_Create_Errors(t *testing.T) {
+	req := func() *model.CreateProductRequest {
+		return &model.CreateProductRequest{SKU: "ABC-001", Name: "Kopi", Price: 15000, Stock: 10, Note: "n"}
+	}
+
+	tests := []struct {
+		name  string
+		setup func(mock sqlmock.Sqlmock)
+	}{
+		{
+			name:  "begin fails",
+			setup: func(m sqlmock.Sqlmock) { m.ExpectBegin().WillReturnError(errBoom) },
+		},
+		{
+			name: "insert product fails -> rollback",
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectQuery(createProductQuery).
+					WithArgs("ABC-001", "Kopi", int64(15000), 10).
+					WillReturnError(errBoom)
+				m.ExpectRollback()
+			},
+		},
+		{
+			name: "insert movement fails -> rollback (produk tidak boleh tersimpan)",
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectQuery(createProductQuery).
+					WithArgs("ABC-001", "Kopi", int64(15000), 10).
+					WillReturnRows(idRows(1))
+				m.ExpectExec(insertMovementQuery).
+					WithArgs(int64(1), "in", 10, "n").
+					WillReturnError(errBoom)
+				m.ExpectRollback()
+			},
+		},
+		{
+			name: "commit fails",
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectQuery(createProductQuery).
+					WithArgs("ABC-001", "Kopi", int64(15000), 10).
+					WillReturnRows(idRows(1))
+				m.ExpectExec(insertMovementQuery).
+					WithArgs(int64(1), "in", 10, "n").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectCommit().WillReturnError(errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, mock := newMockRepo(t)
+			tc.setup(mock)
+
+			err := repo.Create(context.Background(), req())
+			if !errors.Is(err, errBoom) {
+				t.Fatalf("err = %v, want %v", err, errBoom)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductRepository_ExistsBySKU(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnRows(existsRows(want))
+
+		got, err := repo.ExistsBySKU(context.Background(), "ABC-001")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != want {
+			t.Errorf("exists = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestProductRepository_ExistsBySKU_Error(t *testing.T) {
+	repo, mock := newMockRepo(t)
+	mock.ExpectQuery(existsSKUQuery).WithArgs("ABC-001").WillReturnError(errBoom)
+
+	if _, err := repo.ExistsBySKU(context.Background(), "ABC-001"); !errors.Is(err, errBoom) {
+		t.Fatalf("err = %v, want %v", err, errBoom)
+	}
+}

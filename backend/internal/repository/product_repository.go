@@ -66,16 +66,42 @@ func (p *ProductRepository) Search(ctx context.Context, request *model.SearchPro
 }
 
 func (p *ProductRepository) Create(ctx context.Context, request *model.CreateProductRequest) error {
-	createQuery := `INSERT INTO products (sku, name, price, stock) VALUES ($1, $2, $3, $4)`
-	_, err := p.DB.ExecContext(ctx, createQuery, request.SKU, request.Name, request.Price, request.Stock)
+	tx, err := p.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
+
+	createQuery := `INSERT INTO products (sku, name, price, stock) VALUES ($1, $2, $3, $4) RETURNING id`
+	var productID int64
+	err = tx.QueryRowContext(ctx, createQuery, request.SKU, request.Name, request.Price, request.Stock).Scan(&productID)
+	if err != nil {
+		return err
+	}
+
+	if request.Stock > 0 {
+		stockMovementQuery := `INSERT INTO stock_movements (product_id, type, qty, note) VALUES ($1, $2, $3, $4)`
+		stockMovement := entity.StockMovement{
+			ProductID: productID,
+			Type:      "in",
+			Qty:       request.Stock,
+			Note:      request.Note,
+		}
+		_, err = tx.ExecContext(ctx, stockMovementQuery, stockMovement.ProductID, stockMovement.Type, stockMovement.Qty, stockMovement.Note)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (p *ProductRepository) GetSKU(ctx context.Context, SKU string) (bool, error) {
-	getSKUQuery := `SELECT EXIST (SELECT 1 FROM products WHERE sku = $1)`
+func (p *ProductRepository) ExistsBySKU(ctx context.Context, SKU string) (bool, error) {
+	getSKUQuery := `SELECT EXISTS (SELECT 1 FROM products WHERE sku = $1)`
 	var exist bool
 	if err := p.DB.QueryRowContext(ctx, getSKUQuery, SKU).Scan(&exist); err != nil {
 		return false, err

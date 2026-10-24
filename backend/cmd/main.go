@@ -10,10 +10,12 @@ func main() {
 	viperConfig := config.NewViper()
 	db := config.NewDatabase(viperConfig)
 	app := config.NewFiber(viperConfig)
+	validate := config.NewValidator()
 
 	config.Bootstrap(&config.BootstrapConfig{
-		DB:  db,
-		App: app,
+		DB:       db,
+		App:      app,
+		Validate: validate,
 	})
 
 	webPort := viperConfig.GetInt("web.port")
