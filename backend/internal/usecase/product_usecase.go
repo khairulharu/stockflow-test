@@ -33,3 +33,20 @@ func (p *ProductUseCase) SearchProduct(ctx context.Context, request *model.Searc
 
 	return responses, total, nil
 }
+
+func (p *ProductUseCase) CreateProduct(ctx context.Context, request *model.CreateProductRequest) error {
+	exist, err := p.ProductRepository.GetSKU(ctx, request.SKU)
+	if err != nil {
+		return fiber.ErrInternalServerError
+	}
+
+	if exist {
+		return fiber.ErrConflict
+	}
+
+	if err := p.ProductRepository.Create(ctx, request); err != nil {
+		return fiber.ErrInternalServerError
+	}
+
+	return nil
+}
