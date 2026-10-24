@@ -1,7 +1,20 @@
 package route
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"stockflow/internal/delivery/http"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 type RouteConfig struct {
-	App *fiber.App
+	App               *fiber.App
+	ProductController *http.ProductController
+}
+
+func (r *RouteConfig) Setup() {
+	r.ProductRoute()
+}
+
+func (r *RouteConfig) ProductRoute() {
+	r.App.Post("/api/products", r.ProductController.SearchProducts)
 }

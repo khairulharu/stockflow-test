@@ -2,18 +2,23 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"stockflow/internal/config"
 )
 
 func main() {
 	viperConfig := config.NewViper()
-	if viperConfig.GetString("app.name") != "stockflow" {
-		panic("error loading config")
-	}
-	fmt.Println(viperConfig.GetString("app.name"))
-
 	db := config.NewDatabase(viperConfig)
-	if db != nil {
-		fmt.Printf("connecting to database: %s \n", viperConfig.GetString("database.name"))
+	app := config.NewFiber(viperConfig)
+
+	config.Bootstrap(&config.BootstrapConfig{
+		DB:  db,
+		App: app,
+	})
+
+	webPort := viperConfig.GetInt("web.port")
+	err := app.Listen(fmt.Sprintf(":%d", webPort))
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
