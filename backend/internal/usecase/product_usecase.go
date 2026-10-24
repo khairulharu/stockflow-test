@@ -20,6 +20,7 @@ func NewProductUseCase(productRepository *repository.ProductRepository) *Product
 }
 
 func (p *ProductUseCase) SearchProduct(ctx context.Context, request *model.SearchProductRequest) ([]model.ProductResponse, int64, error) {
+	request.Search = request.EscapedSearch()
 	products, total, err := p.ProductRepository.Search(ctx, request)
 	if err != nil {
 		return nil, 0, fiber.ErrInternalServerError

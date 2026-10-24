@@ -1,6 +1,9 @@
 package entity
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type Product struct {
 	ID        int64
@@ -10,4 +13,9 @@ type Product struct {
 	Stock     int64
 	IsActive  bool
 	CreatedAt time.Time
+}
+
+type ProductWithMovement struct {
+	Product
+	LastMovementAt sql.NullTime
 }

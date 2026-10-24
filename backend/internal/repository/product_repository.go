@@ -3,10 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"stockflow/internal/entity"
 	"stockflow/internal/model"
-	"strings"
 )
 
 type ProductRepository struct {
@@ -19,82 +17,50 @@ func NewProductRepository(db *sql.DB) *ProductRepository {
 	}
 }
 
-func (p *ProductRepository) Search(ctx context.Context, request *model.SearchProductRequest) ([]entity.Product, int64, error) {
-	where, args := p.FilterProducts(request)
+func (p *ProductRepository) Search(ctx context.Context, request *model.SearchProductRequest) ([]entity.ProductWithMovement, int64, error) {
+
+	const searchQuery = `
+	SELECT p.id, p.sku, p.name, p.price, p.stock, p.is_active, p.created_at,
+    (SELECT MAX(m.created_at) FROM stock_movements m WHERE m.product_id = p.id) AS last_movement_at
+	FROM products p
+	WHERE ($1::text = '' OR p.sku ILIKE '%' || $1::text || '%' OR p.name ILIKE '%' || $1::text || '%')
+	ORDER BY p.id DESC
+	LIMIT $2 OFFSET $3`
+
+	const countQuery = `
+	SELECT COUNT(*) FROM products p
+	WHERE ($1::text = '' OR p.sku ILIKE '%' || $1::text || '%' OR p.name ILIKE '%' || $1::text || '%')`
 
 	var total int64
-	countQuery := "SELECT COUNT(*) FROM products" + where
-	if err := p.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := p.DB.QueryRowContext(ctx, countQuery, request.Search).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	if total == 0 {
-		return []entity.Product{}, 0, nil
+		return []entity.ProductWithMovement{}, 0, nil
 	}
 
-	limitPos := len(args) + 1
-	offsetPos := len(args) + 2
+	offset := (request.Page - 1) * request.Limit
 
-	query := fmt.Sprintf(`
-		SELECT id, sku, name, price, stock, is_active, created_at
-		FROM products%s
-		ORDER BY created_at DESC, id DESC
-		LIMIT $%d OFFSET $%d`, where, limitPos, offsetPos)
-
-	args = append(args, request.Size, (request.Page-1)*request.Size)
-
-	rows, err := p.DB.QueryContext(ctx, query, args...)
+	rows, err := p.DB.QueryContext(ctx, searchQuery, request.Search, request.Limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	products := make([]entity.Product, 0, request.Size)
+	products := make([]entity.ProductWithMovement, 0)
 	for rows.Next() {
-		var pr entity.Product
-		if err := rows.Scan(
-			&pr.ID,
-			&pr.SKU,
-			&pr.Name,
-			&pr.Price,
-			&pr.Stock,
-			&pr.IsActive,
-			&pr.CreatedAt,
-		); err != nil {
+		var item entity.ProductWithMovement
+
+		if err := rows.Scan(&item.ID, &item.SKU, &item.Name, &item.Price, &item.Stock, &item.IsActive, &item.CreatedAt, &item.LastMovementAt); err != nil {
 			return nil, 0, err
 		}
-		products = append(products, pr)
+
+		products = append(products, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 
 	return products, total, nil
-}
-
-func (p *ProductRepository) FilterProducts(request *model.SearchProductRequest) (string, []any) {
-	var conditions []string
-	var args []any
-
-	if sku := request.SKU; sku != "" {
-		args = append(args, "%"+escapeLike(sku)+"%")
-		conditions = append(conditions, fmt.Sprintf("sku ILIKE $%d", len(args)))
-	}
-
-	if name := request.Name; name != "" {
-		args = append(args, "%"+escapeLike(name)+"%")
-		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", len(args)))
-	}
-
-	if len(conditions) == 0 {
-		return "", args
-	}
-
-	return " WHERE " + strings.Join(conditions, " AND "), args
-}
-
-var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-func escapeLike(s string) string {
-	return likeEscaper.Replace(s)
 }

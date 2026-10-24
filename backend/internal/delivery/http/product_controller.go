@@ -1,9 +1,9 @@
 package http
 
 import (
-	"math"
 	"stockflow/internal/model"
 	"stockflow/internal/usecase"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -19,28 +19,34 @@ func NewProductController(productUseCase *usecase.ProductUseCase) *ProductContro
 }
 
 func (p *ProductController) SearchProducts(ctx *fiber.Ctx) error {
-	request := &model.SearchProductRequest{
-		SKU:  ctx.Query("sku", ""),
-		Name: ctx.Query("name", ""),
-		Page: ctx.QueryInt("page", 1),
-		Size: ctx.QueryInt("size", 10),
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 10)
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
 	}
 
-	responses, total, err := p.ProductUseCase.SearchProduct(ctx.Context(), request)
+	request := &model.SearchProductRequest{
+		Search: strings.TrimSpace(ctx.Query("search", "")),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	responses, total, err := p.ProductUseCase.SearchProduct(ctx.UserContext(), request)
 	if err != nil {
 		return err
 	}
 
-	paging := &model.PageMetadata{
-		Page:      request.Page,
-		Size:      request.Size,
-		TotalItem: total,
-		TotalPage: int64(math.Ceil(float64(total) / float64(request.Size))),
-	}
-
-	return ctx.JSON(model.WebResponse[[]model.ProductResponse]{
-		Data:   responses,
-		Paging: paging,
+	return ctx.JSON(model.PageResponse[model.ProductResponse]{
+		Data:  responses,
+		Page:  request.Page,
+		Limit: request.Limit,
+		Total: total,
 	})
 
 }
