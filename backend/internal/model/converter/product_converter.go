@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-func ProductToResponse(product *entity.ProductWithMovement) *model.ProductResponse {
+func ProductToResponse(product *entity.ProductWithMovement) *model.ProductResponseWithMovement {
 	var lastMovementAt *time.Time
 	if product.LastMovementAt.Valid {
 		t := product.LastMovementAt.Time
 		lastMovementAt = &t
 	}
-	return &model.ProductResponse{
+	return &model.ProductResponseWithMovement{
 		ID:             product.ID,
 		SKU:            product.SKU,
 		Name:           product.Name,

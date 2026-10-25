@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"stockflow/internal/entity"
 	"stockflow/internal/model"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type ProductRepository struct {
@@ -107,4 +110,18 @@ func (p *ProductRepository) ExistsBySKU(ctx context.Context, SKU string) (bool, 
 		return false, err
 	}
 	return exist, nil
+}
+
+func (p *ProductRepository) UpdateProduct(ctx context.Context, request *model.UpdateProductRequest) (entity.Product, error) {
+	updateQuery := `UPDATE products SET name = $1, price = $2, is_active = $3 WHERE id = $4 RETURNING id, sku, name, price, stock, is_active, created_at`
+	var product entity.Product
+	err := p.DB.QueryRowContext(ctx, updateQuery, request.Name, request.Price, *request.IsActive, request.ID).
+		Scan(&product.ID, &product.SKU, &product.Name, &product.Price, &product.Stock, &product.IsActive, &product.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return entity.Product{}, fiber.ErrNotFound
+		}
+		return entity.Product{}, err
+	}
+	return product, nil
 }

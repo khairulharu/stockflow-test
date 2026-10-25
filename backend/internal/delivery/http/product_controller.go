@@ -42,7 +42,7 @@ func (p *ProductController) SearchProducts(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.JSON(model.PageResponse[model.ProductResponse]{
+	return ctx.JSON(model.PageResponse[model.ProductResponseWithMovement]{
 		Data:  responses,
 		Page:  request.Page,
 		Limit: request.Limit,

@@ -23,14 +23,14 @@ func NewProductUseCase(productRepository *repository.ProductRepository, validate
 	}
 }
 
-func (p *ProductUseCase) SearchProduct(ctx context.Context, request *model.SearchProductRequest) ([]model.ProductResponse, int64, error) {
+func (p *ProductUseCase) SearchProduct(ctx context.Context, request *model.SearchProductRequest) ([]model.ProductResponseWithMovement, int64, error) {
 	request.Search = request.EscapedSearch()
 	products, total, err := p.ProductRepository.Search(ctx, request)
 	if err != nil {
 		return nil, 0, fiber.ErrInternalServerError
 	}
 
-	responses := make([]model.ProductResponse, len(products))
+	responses := make([]model.ProductResponseWithMovement, len(products))
 	for i, product := range products {
 		responses[i] = *converter.ProductToResponse(&product)
 	}
@@ -62,4 +62,12 @@ func (p *ProductUseCase) CreateProduct(ctx context.Context, request *model.Creat
 	}
 
 	return nil
+}
+
+func (p *ProductUseCase) UpdateProduct(ctx context.Context, request *model.UpdateProductRequest) (model.ProductResponse, error) {
+	request.Name = strings.TrimSpace(request.Name)
+
+	if err := p.Validate.Struct(request); err != nil {
+		return model.ProductResponse{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
 }

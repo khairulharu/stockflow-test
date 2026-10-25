@@ -6,6 +6,16 @@ import (
 )
 
 type ProductResponse struct {
+	ID        int64     `json:"id"`
+	SKU       string    `json:"sku"`
+	Name      string    `json:"name"`
+	Price     int64     `json:"price"`
+	Stock     int64     `json:"stock"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ProductResponseWithMovement struct {
 	ID             int64      `json:"id"`
 	SKU            string     `json:"sku"`
 	Name           string     `json:"name"`
@@ -28,6 +38,13 @@ type CreateProductRequest struct {
 	Price int64  `json:"price" validate:"gte=0"`
 	Stock int    `json:"stock" validate:"gte=0"`
 	Note  string `json:"note" validate:"max=255"`
+}
+
+type UpdateProductRequest struct {
+	ID       int64  `json:"-" validate:"required"`
+	Name     string `json:"name" validate:"max=255"`
+	Price    int64  `json:"price" validate:"gte=0"`
+	IsActive *bool  `json:"is_active"`
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
