@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func ProductToResponse(product *entity.ProductWithMovement) *model.ProductResponseWithMovement {
+func ProductWithMovementToResponse(product *entity.ProductWithMovement) *model.ProductResponseWithMovement {
 	var lastMovementAt *time.Time
 	if product.LastMovementAt.Valid {
 		t := product.LastMovementAt.Time
@@ -21,5 +21,17 @@ func ProductToResponse(product *entity.ProductWithMovement) *model.ProductRespon
 		IsActive:       product.IsActive,
 		CreatedAt:      product.CreatedAt,
 		LastMovementAt: lastMovementAt,
+	}
+}
+
+func ProductToResponse(product *entity.Product) *model.ProductResponse {
+	return &model.ProductResponse{
+		ID:        product.ID,
+		SKU:       product.SKU,
+		Name:      product.Name,
+		Price:     product.Price,
+		Stock:     product.Stock,
+		IsActive:  product.IsActive,
+		CreatedAt: product.CreatedAt,
 	}
 }

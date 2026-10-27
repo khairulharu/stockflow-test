@@ -16,6 +16,7 @@ func (r *RouteConfig) Setup() {
 }
 
 func (r *RouteConfig) ProductRoute() {
-	r.App.Get("/api/products", r.ProductController.SearchProducts)
+	r.App.Get("/api/products", r.ProductController.Search)
 	r.App.Post("/api/products", r.ProductController.Create)
+	r.App.Put("/api/products/:id", r.ProductController.Update)
 }

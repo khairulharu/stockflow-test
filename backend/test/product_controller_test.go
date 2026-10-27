@@ -30,7 +30,7 @@ func newApp(t *testing.T) (*fiber.App, sqlmock.Sqlmock) {
 	ctrl := httpd.NewProductController(uc)
 
 	app := fiber.New()
-	app.Get("/api/products", ctrl.SearchProducts)
+	app.Get("/api/products", ctrl.Search)
 	app.Post("/api/products", ctrl.Create)
 	return app, mock
 }

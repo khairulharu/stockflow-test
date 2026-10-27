@@ -32,7 +32,7 @@ func (p *ProductUseCase) SearchProduct(ctx context.Context, request *model.Searc
 
 	responses := make([]model.ProductResponseWithMovement, len(products))
 	for i, product := range products {
-		responses[i] = *converter.ProductToResponse(&product)
+		responses[i] = *converter.ProductWithMovementToResponse(&product)
 	}
 
 	return responses, total, nil
@@ -70,4 +70,12 @@ func (p *ProductUseCase) UpdateProduct(ctx context.Context, request *model.Updat
 	if err := p.Validate.Struct(request); err != nil {
 		return model.ProductResponse{}, fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
+
+	product, err := p.ProductRepository.UpdateProduct(ctx, request)
+
+	if err != nil {
+		return model.ProductResponse{}, err
+	}
+
+	return *converter.ProductToResponse(&product), err
 }

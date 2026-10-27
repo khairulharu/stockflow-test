@@ -18,7 +18,7 @@ func NewProductController(productUseCase *usecase.ProductUseCase) *ProductContro
 	}
 }
 
-func (p *ProductController) SearchProducts(ctx *fiber.Ctx) error {
+func (p *ProductController) Search(ctx *fiber.Ctx) error {
 	page := ctx.QueryInt("page", 1)
 	limit := ctx.QueryInt("limit", 10)
 	if page < 1 {
@@ -63,4 +63,23 @@ func (p *ProductController) Create(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.SendStatus(fiber.StatusCreated)
+}
+
+func (p *ProductController) Update(ctx *fiber.Ctx) error {
+	id, err := ctx.ParamsInt("id")
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	var request model.UpdateProductRequest
+	if err := ctx.BodyParser(&request); err != nil {
+		return fiber.ErrBadRequest
+	}
+	request.ID = int64(id)
+
+	response, err := p.ProductUseCase.UpdateProduct(ctx.UserContext(), &request)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(response)
 }

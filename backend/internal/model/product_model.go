@@ -41,10 +41,10 @@ type CreateProductRequest struct {
 }
 
 type UpdateProductRequest struct {
-	ID       int64  `json:"-" validate:"required"`
-	Name     string `json:"name" validate:"max=255"`
-	Price    int64  `json:"price" validate:"gte=0"`
-	IsActive *bool  `json:"is_active"`
+	ID       int64  `json:"-" validate:"required,min=1"`
+	Name     string `json:"name" validate:"required,max=255"`
+	Price    int64  `json:"price" validate:"gte=0,lte=2147483647"`
+	IsActive *bool  `json:"is_active" validate:"required"`
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
