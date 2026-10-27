@@ -79,3 +79,10 @@ func (p *ProductUseCase) UpdateProduct(ctx context.Context, request *model.Updat
 
 	return *converter.ProductToResponse(&product), err
 }
+
+func (p *ProductUseCase) DeleteProduct(ctx context.Context, id int) error {
+	if err := p.ProductRepository.DeleteProduct(ctx, id); err != nil {
+		return err
+	}
+	return nil
+}

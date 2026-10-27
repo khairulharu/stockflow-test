@@ -1,6 +1,8 @@
 package http
 
 import (
+	"errors"
+	"fmt"
 	"stockflow/internal/model"
 	"stockflow/internal/usecase"
 	"strings"
@@ -82,4 +84,25 @@ func (p *ProductController) Update(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.JSON(response)
+}
+
+func (p *ProductController) Delete(ctx *fiber.Ctx) error {
+	id, err := ctx.ParamsInt("id")
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	fmt.Println(id)
+	if err := p.ProductUseCase.DeleteProduct(ctx.UserContext(), id); err != nil {
+		if errors.Is(err, fiber.ErrNotFound) {
+			return ctx.SendStatus(fiber.StatusNotFound)
+		}
+
+		return ctx.Status(fiber.StatusConflict).JSON(model.ErrorResponse{
+			Error: model.ErrorDetail{
+				Code: err.Error(),
+			},
+		})
+	}
+
+	return ctx.SendStatus(fiber.StatusNoContent)
 }
