@@ -22,12 +22,19 @@ const (
 	existsSKUQuery      = `SELECT EXISTS (SELECT 1 FROM products WHERE sku = $1)`
 	createProductQuery  = `INSERT INTO products (sku, name, price, stock) VALUES ($1, $2, $3, $4) RETURNING id`
 	insertMovementQuery = `INSERT INTO stock_movements (product_id, type, qty, note) VALUES ($1, $2, $3, $4)`
+	updateProductQuery  = `UPDATE products SET name = $1, price = $2, is_active = $3 WHERE id = $4 RETURNING id, sku, name, price, stock, is_active, created_at`
 )
 
 var createdAt = time.Date(2026, 10, 22, 18, 8, 50, 0, time.UTC)
 var lastMovement = createdAt.Add(2 * time.Hour)
 
 func productRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{
+		"id", "sku", "name", "price", "stock", "is_active", "created_at",
+	})
+}
+
+func productWithMovementRows() *sqlmock.Rows {
 	return sqlmock.NewRows([]string{
 		"id", "sku", "name", "price", "stock", "is_active", "created_at", "last_movement_at",
 	})

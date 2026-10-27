@@ -39,7 +39,7 @@ func TestProductUseCase_SearchProduct_Success(t *testing.T) {
 		WillReturnRows(countRows(2))
 	mock.ExpectQuery(searchQuery).
 		WithArgs("", 10, 0).
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow(int64(2), "SKU-2", "Teh Botol", int64(5000), int64(0), false, createdAt, nil).
 			AddRow(int64(1), "SKU-1", "Kopi Susu", int64(15000), int64(10), true, createdAt, lastMovement))
 
@@ -87,7 +87,7 @@ func TestProductUseCase_SearchProduct_PassesSearchAndPaging(t *testing.T) {
 		WillReturnRows(countRows(7))
 	mock.ExpectQuery(searchQuery).
 		WithArgs("kopi", 5, 5).
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow(int64(6), "KOP-6", "Kopi Hitam", int64(12000), int64(4), true, createdAt, nil).
 			AddRow(int64(7), "KOP-7", "Kopi Tubruk", int64(13000), int64(2), true, createdAt, nil))
 
@@ -132,7 +132,7 @@ func TestProductUseCase_SearchProduct_EscapesLikeWildcards(t *testing.T) {
 				WillReturnRows(countRows(1))
 			mock.ExpectQuery(searchQuery).
 				WithArgs(tc.want, 10, 0).
-				WillReturnRows(productRows().
+				WillReturnRows(productWithMovementRows().
 					AddRow(int64(1), "A1", "Kopi", int64(15000), int64(10), true, createdAt, nil))
 
 			_, _, err := uc.SearchProduct(context.Background(), &model.SearchProductRequest{
@@ -227,7 +227,7 @@ func TestProductUseCase_SearchProduct_RepositoryError(t *testing.T) {
 }
 
 func TestProductResponse_LastMovementAt_JSON(t *testing.T) {
-	b, err := json.Marshal(model.ProductResponse{})
+	b, err := json.Marshal(model.ProductResponseWithMovement{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,5 +370,69 @@ func TestProductUseCase_CreateProduct_InternalErrors(t *testing.T) {
 				t.Errorf("unmet expectations: %v", err)
 			}
 		})
+	}
+}
+
+func TestProductUseCase_UpdateProduct_ValidationFails(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	tests := []struct {
+		name    string
+		request model.UpdateProductRequest
+	}{
+		{"empty name", model.UpdateProductRequest{ID: 1, Name: "   ", Price: 100, IsActive: boolPtr(true)}},
+		{"negative price", model.UpdateProductRequest{ID: 1, Name: "Kopi", Price: -1, IsActive: boolPtr(true)}},
+		{"nil is_active", model.UpdateProductRequest{ID: 1, Name: "Kopi", Price: 100, IsActive: nil}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Tidak ada ekspektasi DB karena harus gagal di validasi
+			req := tc.request
+			_, err := uc.UpdateProduct(context.Background(), &req)
+
+			if statusCode(err) != fiber.StatusBadRequest {
+				t.Fatalf("status = %d (err=%v), want 400", statusCode(err), err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductUseCase_UpdateProduct_NotFound(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	mock.ExpectQuery(updateProductQuery).
+		WithArgs("Kopi", int64(15000), true, int64(999)).
+		WillReturnRows(productRows()) // Kosong -> memicu sql.ErrNoRows
+
+	_, err := uc.UpdateProduct(context.Background(), &model.UpdateProductRequest{
+		ID: 999, Name: "Kopi", Price: 15000, IsActive: boolPtr(true),
+	})
+
+	if !errors.Is(err, fiber.ErrNotFound) {
+		t.Fatalf("err = %v, want fiber.ErrNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductUseCase_UpdateProduct_InternalError(t *testing.T) {
+	uc, mock := newUseCase(t)
+
+	mock.ExpectQuery(updateProductQuery).
+		WithArgs("Kopi", int64(15000), true, int64(1)).
+		WillReturnError(errBoom) // Error DB
+
+	_, err := uc.UpdateProduct(context.Background(), &model.UpdateProductRequest{
+		ID: 1, Name: "Kopi", Price: 15000, IsActive: boolPtr(true),
+	})
+
+	// Pastikan error internal DB dibungkus jadi 500 (sesuai pattern UseCase kamu di file sebelumnya)
+	if statusCode(err) != fiber.StatusInternalServerError {
+		t.Fatalf("status = %d (err=%v), want 500", statusCode(err), err)
 	}
 }

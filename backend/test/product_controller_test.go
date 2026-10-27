@@ -32,6 +32,7 @@ func newApp(t *testing.T) (*fiber.App, sqlmock.Sqlmock) {
 	app := fiber.New()
 	app.Get("/api/products", ctrl.Search)
 	app.Post("/api/products", ctrl.Create)
+	app.Put("/api/products/:id", ctrl.Update)
 	return app, mock
 }
 
@@ -115,7 +116,7 @@ func TestEndpoint_SearchProducts_ResponseShapeAndClamp(t *testing.T) {
 	mock.ExpectQuery(countQuery).WithArgs("").WillReturnRows(countRows(1))
 	mock.ExpectQuery(searchQuery).
 		WithArgs("", 100, 0).
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow(int64(1), "A1", "Kopi", int64(15000), int64(10), true, createdAt, nil))
 
 	resp := doRequest(t, app, http.MethodGet, "/api/products?page=0&limit=1000", "")
@@ -160,5 +161,78 @@ func TestEndpoint_SearchProducts_EmptyResultIsArray(t *testing.T) {
 	}
 	if body["total"] != float64(0) {
 		t.Errorf("total = %v, want 0", body["total"])
+	}
+}
+
+func TestEndpoint_UpdateProduct_StatusCodes(t *testing.T) {
+	tests := []struct {
+		name  string
+		id    string
+		body  string
+		setup func(m sqlmock.Sqlmock)
+		want  int
+	}{
+		{
+			name: "invalid json",
+			id:   "1",
+			body: `{not json`,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "invalid id param",
+			id:   "abc",
+			body: `{"name":"Kopi","price":100,"is_active":true}`,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "validation fails",
+			id:   "1",
+			body: `{"name":"","price":100,"is_active":true}`, // name kosong
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "product not found",
+			id:   "999", // ID yang tidak ada
+			body: `{"name":"Kopi","price":100,"is_active":true}`,
+			setup: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(updateProductQuery).
+					WithArgs("Kopi", int64(100), true, int64(999)).
+					WillReturnRows(productRows()) // return 0 rows -> ErrNoRows
+			},
+			want: http.StatusNotFound, // Harusnya 404!
+		},
+		{
+			name: "success update",
+			id:   "1",
+			body: `{"name":"Kopi Susu","price":20000,"is_active":false}`,
+			setup: func(m sqlmock.Sqlmock) {
+				rows := productRows().
+					AddRow(int64(1), "ABC-001", "Kopi Susu", int64(20000), int64(10), false, createdAt)
+				m.ExpectQuery(updateProductQuery).
+					WithArgs("Kopi Susu", int64(20000), false, int64(1)).
+					WillReturnRows(rows)
+			},
+			want: http.StatusOK,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app, mock := newApp(t)
+			// Pastikan route sudah didaftarkan di newApp
+			// app.Put("/api/products/:id", ctrl.Update)
+
+			if tc.setup != nil {
+				tc.setup(mock)
+			}
+
+			resp := doRequest(t, app, http.MethodPut, "/api/products/"+tc.id, tc.body)
+			if resp.StatusCode != tc.want {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unmet expectations: %v", err)
+			}
+		})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"stockflow/internal/repository"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/gofiber/fiber/v2"
 )
 
 var errBoom = errors.New("boom")
@@ -33,7 +34,7 @@ func TestProductRepository_Search_ReturnsRows(t *testing.T) {
 		WillReturnRows(countRows(2))
 	mock.ExpectQuery(searchQuery).
 		WithArgs("", 10, 0).
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow(int64(2), "SKU-2", "Teh Botol", int64(5000), int64(0), false, createdAt, nil).
 			AddRow(int64(1), "SKU-1", "Kopi Susu", int64(15000), int64(10), true, createdAt, lastMovement))
 
@@ -121,7 +122,7 @@ func TestProductRepository_Search_SearchAndPagination(t *testing.T) {
 				WillReturnRows(countRows(25))
 			mock.ExpectQuery(searchQuery).
 				WithArgs(tc.wantSearch, tc.wantLimit, tc.wantOffset).
-				WillReturnRows(productRows().
+				WillReturnRows(productWithMovementRows().
 					AddRow(int64(1), "A1", "Kopi", int64(15000), int64(10), true, createdAt, nil))
 
 			request := tc.request
@@ -211,7 +212,7 @@ func TestProductRepository_Search_ScanError(t *testing.T) {
 	mock.ExpectQuery(searchQuery).
 		WithArgs("", 10, 0).
 		// id berisi string non-angka, jadi Scan ke int64 gagal
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow("not-a-number", "A1", "Kopi", int64(15000), int64(10), true, createdAt, nil))
 
 	products, total, err := repo.Search(context.Background(), &model.SearchProductRequest{Page: 1, Limit: 10})
@@ -229,7 +230,7 @@ func TestProductRepository_Search_RowsIterationError(t *testing.T) {
 	mock.ExpectQuery(countQuery).WithArgs("").WillReturnRows(countRows(2))
 	mock.ExpectQuery(searchQuery).
 		WithArgs("", 10, 0).
-		WillReturnRows(productRows().
+		WillReturnRows(productWithMovementRows().
 			AddRow(int64(1), "A1", "Kopi", int64(15000), int64(10), true, createdAt, nil).
 			AddRow(int64(2), "A2", "Teh", int64(5000), int64(3), true, createdAt, nil).
 			RowError(1, errBoom)) // error muncul saat iterasi row kedua
@@ -377,3 +378,54 @@ func TestProductRepository_ExistsBySKU_Error(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, errBoom)
 	}
 }
+
+func TestProductRepository_UpdateProduct_Success(t *testing.T) {
+	repo, mock := newMockRepo(t)
+
+	// Data yang dikembalikan setelah UPDATE sukses
+	rows := productRows(). // menggunakan helper productRows yang sudah ada
+				AddRow(int64(1), "ABC-001", "Kopi Updated", int64(20000), int64(10), true, createdAt)
+
+	mock.ExpectQuery(updateProductQuery).
+		WithArgs("Kopi Updated", int64(20000), true, int64(1)).
+		WillReturnRows(rows)
+
+	product, err := repo.UpdateProduct(context.Background(), &model.UpdateProductRequest{
+		ID: 1, Name: "Kopi Updated", Price: 20000, IsActive: boolPtr(true),
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if product.Name != "Kopi Updated" || product.Price != 20000 {
+		t.Errorf("product mismatch: %+v", product)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestProductRepository_UpdateProduct_NotFound(t *testing.T) {
+	repo, mock := newMockRepo(t)
+
+	// Simulasi ID tidak ada: Query sukses tapi tidak ada rows yang dikembalikan.
+	// Scan() akan menghasilkan sql.ErrNoRows
+	mock.ExpectQuery(updateProductQuery).
+		WithArgs("Kopi Updated", int64(20000), true, int64(999)).
+		WillReturnRows(productRows()) // Baris kosong
+
+	_, err := repo.UpdateProduct(context.Background(), &model.UpdateProductRequest{
+		ID: 999, Name: "Kopi Updated", Price: 20000, IsActive: boolPtr(true),
+	})
+
+	// Cek apakah errornya benar fiber.ErrNotFound
+	if !errors.Is(err, fiber.ErrNotFound) {
+		t.Fatalf("err = %v, want fiber.ErrNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// Helper untuk pointer boolean (jika belum ada)
+func boolPtr(b bool) *bool { return &b }

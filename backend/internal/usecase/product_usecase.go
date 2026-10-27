@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"stockflow/internal/model"
 	"stockflow/internal/model/converter"
 	"stockflow/internal/repository"
@@ -74,7 +75,11 @@ func (p *ProductUseCase) UpdateProduct(ctx context.Context, request *model.Updat
 	product, err := p.ProductRepository.UpdateProduct(ctx, request)
 
 	if err != nil {
-		return model.ProductResponse{}, err
+		var fiberErr *fiber.Error
+		if errors.As(err, &fiberErr) {
+			return model.ProductResponse{}, err
+		}
+		return model.ProductResponse{}, fiber.ErrInternalServerError
 	}
 
 	return *converter.ProductToResponse(&product), nil
