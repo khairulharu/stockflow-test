@@ -128,16 +128,7 @@ func (p *ProductRepository) UpdateProduct(ctx context.Context, request *model.Up
 }
 
 func (p *ProductRepository) DeleteProduct(ctx context.Context, id int) error {
-	getIdFromStockMovementQuery := `SELECT EXISTS (SELECT 1 FROM stock_movements WHERE product_id = $1)`
 	deleteQuery := `DELETE FROM products WHERE id = $1`
-	var exist bool
-	if err := p.DB.QueryRowContext(ctx, getIdFromStockMovementQuery, id).Scan(&exist); err != nil {
-		return err
-	}
-	fmt.Println(exist)
-	if exist {
-		return errors.New("PRODUCT_HAS_HISTORY")
-	}
 
 	response, err := p.DB.ExecContext(ctx, deleteQuery, id)
 	if err != nil {
@@ -153,4 +144,14 @@ func (p *ProductRepository) DeleteProduct(ctx context.Context, id int) error {
 	}
 
 	return nil
+}
+
+func (p *ProductRepository) ExistStockMovementByProductId(ctx context.Context, id int) (bool, error) {
+	existFromStockMovementQuery := `SELECT EXISTS (SELECT 1 FROM stock_movements WHERE product_id = $1)`
+	var exist bool
+	if err := p.DB.QueryRowContext(ctx, existFromStockMovementQuery, id).Scan(&exist); err != nil {
+		return false, err
+	}
+	fmt.Println(exist)
+	return exist, nil
 }

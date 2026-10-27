@@ -77,10 +77,17 @@ func (p *ProductUseCase) UpdateProduct(ctx context.Context, request *model.Updat
 		return model.ProductResponse{}, err
 	}
 
-	return *converter.ProductToResponse(&product), err
+	return *converter.ProductToResponse(&product), nil
 }
 
 func (p *ProductUseCase) DeleteProduct(ctx context.Context, id int) error {
+	exist, err := p.ProductRepository.ExistStockMovementByProductId(ctx, id)
+	if err != nil {
+		return fiber.ErrInternalServerError
+	}
+	if exist {
+		return fiber.NewError(fiber.StatusConflict, "PRODUCT_HAS_HISTORY")
+	}
 	if err := p.ProductRepository.DeleteProduct(ctx, id); err != nil {
 		return err
 	}
