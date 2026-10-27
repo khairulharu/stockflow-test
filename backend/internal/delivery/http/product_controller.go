@@ -41,7 +41,19 @@ func (p *ProductController) Search(ctx *fiber.Ctx) error {
 
 	responses, total, err := p.ProductUseCase.SearchProduct(ctx.UserContext(), request)
 	if err != nil {
-		return err
+		if fiberErr, ok := errors.AsType[*fiber.Error](err); ok {
+			return ctx.Status(fiberErr.Code).JSON(model.ErrorResponse{
+				Error: model.ErrorDetail{
+					Code: fiberErr.Message,
+				},
+			})
+		}
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(model.ErrorResponse{
+			Error: model.ErrorDetail{
+				Code: "INTERNAL_SERVER_ERROR",
+			},
+		})
 	}
 
 	return ctx.JSON(model.PageResponse[model.ProductResponseWithMovement]{
@@ -61,7 +73,19 @@ func (p *ProductController) Create(ctx *fiber.Ctx) error {
 	}
 
 	if err := p.ProductUseCase.CreateProduct(ctx.UserContext(), &request); err != nil {
-		return err
+		if fiberErr, ok := errors.AsType[*fiber.Error](err); ok {
+			return ctx.Status(fiberErr.Code).JSON(model.ErrorResponse{
+				Error: model.ErrorDetail{
+					Code: fiberErr.Message,
+				},
+			})
+		}
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(model.ErrorResponse{
+			Error: model.ErrorDetail{
+				Code: "INTERNAL_SERVER_ERROR",
+			},
+		})
 	}
 
 	return ctx.SendStatus(fiber.StatusCreated)
@@ -80,7 +104,19 @@ func (p *ProductController) Update(ctx *fiber.Ctx) error {
 
 	response, err := p.ProductUseCase.UpdateProduct(ctx.UserContext(), &request)
 	if err != nil {
-		return err
+		if fiberErr, ok := errors.AsType[*fiber.Error](err); ok {
+			return ctx.Status(fiberErr.Code).JSON(model.ErrorResponse{
+				Error: model.ErrorDetail{
+					Code: fiberErr.Message,
+				},
+			})
+		}
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(model.ErrorResponse{
+			Error: model.ErrorDetail{
+				Code: "INTERNAL_SERVER_ERROR",
+			},
+		})
 	}
 
 	return ctx.JSON(response)
@@ -93,13 +129,17 @@ func (p *ProductController) Delete(ctx *fiber.Ctx) error {
 	}
 	fmt.Println(id)
 	if err := p.ProductUseCase.DeleteProduct(ctx.UserContext(), id); err != nil {
-		if errors.Is(err, fiber.ErrNotFound) {
-			return ctx.SendStatus(fiber.StatusNotFound)
+		if fiberErr, ok := errors.AsType[*fiber.Error](err); ok {
+			return ctx.Status(fiberErr.Code).JSON(model.ErrorResponse{
+				Error: model.ErrorDetail{
+					Code: fiberErr.Message,
+				},
+			})
 		}
 
-		return ctx.Status(fiber.StatusConflict).JSON(model.ErrorResponse{
+		return ctx.Status(fiber.StatusInternalServerError).JSON(model.ErrorResponse{
 			Error: model.ErrorDetail{
-				Code: err.Error(),
+				Code: "INTERNAL_SERVER_ERROR",
 			},
 		})
 	}
