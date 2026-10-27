@@ -6,3 +6,11 @@ type PageResponse[T any] struct {
 	Limit int   `json:"limit"`
 	Total int64 `json:"total"`
 }
+
+type ErrorResponse struct {
+	Error ErrorDetail `json:"error"`
+}
+
+type ErrorDetail struct {
+	Code string `json:"code"`
+}
